@@ -73,7 +73,9 @@ static GSLimitationChecker *instance = nil;
 }
 
 - (void)appDidEnterForeground{
-  [self checkInterval];
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self checkInterval];
+  });
 }
 
 
@@ -100,7 +102,6 @@ static GSLimitationChecker *instance = nil;
 }
 
 - (void)initAll{
-  self.timer = [NSTimer scheduledTimerWithTimeInterval:GSLIMITATION_INTERVAL target:self selector:@selector(checkInterval) userInfo:nil repeats:YES];
   
   //app went to background. dismiss it and let the timer relaunch it
   [[NSNotificationCenter defaultCenter] addObserver:self
@@ -127,12 +128,23 @@ static GSLimitationChecker *instance = nil;
 #pragma mark - Implementations
 
 - (void)expiredAt:(NSDate*)expireDate withTitle:(NSString*)title withMessage:(NSString*)message{
+  
+  if(!self.timer){
+    //check before the timer start
+    [self appDidEnterForeground];
+    self.timer = [NSTimer scheduledTimerWithTimeInterval:GSLIMITATION_INTERVAL target:self selector:@selector(checkInterval) userInfo:nil repeats:YES];
+  }
   self.expire = expireDate;
   _title = title;
   _msg = message;
 }
 
 - (void)expiredAt:(NSDate *)expireDate forTarget:(id<GSLimitationCheckerDelegate>)target andButtonLabel:(NSString*)label withTitle:(NSString *)title withMessage:(NSString *)message{
+  if(!self.timer){
+    //check before the timer start
+    [self appDidEnterForeground];
+    self.timer = [NSTimer scheduledTimerWithTimeInterval:GSLIMITATION_INTERVAL target:self selector:@selector(checkInterval) userInfo:nil repeats:YES];
+  }
   self.expire = expireDate;
   _title = title;
   _msg = message;
