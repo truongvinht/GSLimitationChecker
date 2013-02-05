@@ -38,7 +38,7 @@
 @interface GSLimitationChecker : NSObject<UIAlertViewDelegate>
 
 //delegate for the alert with button
-@property(nonatomic,weak) id<GSLimitationCheckerDelegate> delegate;
+@property(nonatomic,assign) id<GSLimitationCheckerDelegate> delegate;
 
 /** Method to get the singleton instance of Limitationchecker.
  *  @return the instance of GSLimitationChecker
