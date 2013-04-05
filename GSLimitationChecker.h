@@ -37,8 +37,11 @@
 /*! Class to check wether the limit is already over.*/
 @interface GSLimitationChecker : NSObject<UIAlertViewDelegate>
 
-//delegate for the alert with button
-@property(nonatomic,weak) id<GSLimitationCheckerDelegate> delegate;
+///delegate for the alert with button
+@property(nonatomic,assign) id<GSLimitationCheckerDelegate> delegate;
+
+/// property to check the date after manipulating the time. Default value is "False"
+@property(nonatomic,readwrite) BOOL isCheckingPast;
 
 /** Method to get the singleton instance of Limitationchecker.
  *  @return the instance of GSLimitationChecker

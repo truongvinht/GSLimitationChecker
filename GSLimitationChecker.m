@@ -27,6 +27,8 @@
 
 #define GSLIMITATION_INTERVAL 5
 
+#define GSLIMIATION_LAST_EXPIRE_TAG @"GSLCHECKER_EX_DA"
+
 @interface GSLimitationChecker()
 
 //timer to launch the message
@@ -61,6 +63,7 @@
 @synthesize msg = _msg;
 @synthesize alert;
 @synthesize delegate = _delegate;
+@synthesize isCheckingPast = _isCheckingPast;
 @synthesize buttonLabel;
 
 static GSLimitationChecker *instance = nil;
@@ -73,13 +76,14 @@ static GSLimitationChecker *instance = nil;
 }
 
 - (void)appDidEnterForeground{
-  [self checkInterval];
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self checkInterval];
+  });
 }
 
 
-
-- (void)checkInterval{
-  
+- (BOOL)checkDateIsExpired{
+  //check wether the user reached the expire date
   if (self.expire) {
     NSDate *now = [NSDate date];
     NSDate *endDate = self.expire;
@@ -93,14 +97,93 @@ static GSLimitationChecker *instance = nil;
         self.alert = [[UIAlertView alloc] initWithTitle:_title message:_msg delegate:nil cancelButtonTitle:nil otherButtonTitles:nil];
       }
       dispatch_async(dispatch_get_main_queue(), ^{
+        
+        if (_isCheckingPast) {
+          //remember expire date
+          NSUserDefaults *userPrefs = [NSUserDefaults standardUserDefaults];
+          
+          [userPrefs setValue:self.expire forKey:GSLIMIATION_LAST_EXPIRE_TAG];
+          [userPrefs synchronize];
+        }
+        
         [self.alert show];
       });
+      
+      //date is expired
+      return YES;
     }
+  }
+  //date is not expired
+  return NO;
+}
+
+- (void)checkInterval{
+  
+  //no expire date set
+  if (!self.expire) {
+    return;
+  }
+  
+  if (_isCheckingPast) {
+    
+    //date is already expired, no need to check more
+    if ([self checkDateIsExpired]) {
+      return;
+    }
+    
+    
+    //read the last expire date
+    NSUserDefaults *userPrefs = [NSUserDefaults standardUserDefaults];
+    NSDate *lastExpireDate = [userPrefs valueForKey:GSLIMIATION_LAST_EXPIRE_TAG];
+    
+    //no expire date was saved
+    if (!lastExpireDate) {
+      //continue with normal check
+      [self checkDateIsExpired];
+    }else{
+      
+      //compare the last expire date with expire date
+      switch ([lastExpireDate compare:self.expire]) {
+        case NSOrderedSame:{
+          //user manipulated the time to reach the expire date
+          
+          if (_delegate) {
+            //alert with OK button
+            self.alert = [[UIAlertView alloc] initWithTitle:_title message:_msg delegate:self cancelButtonTitle:nil otherButtonTitles:self.buttonLabel,nil];
+          }else{
+            //already expired
+            self.alert = [[UIAlertView alloc] initWithTitle:_title message:_msg delegate:nil cancelButtonTitle:nil otherButtonTitles:nil];
+          }
+          dispatch_async(dispatch_get_main_queue(), ^{
+            [self.alert show];
+          });
+          
+          }
+          break;
+        case NSOrderedAscending:{
+          //expire date is after last expire date
+          
+          //remove the last expire date, because it will be useless
+          dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:GSLIMIATION_LAST_EXPIRE_TAG];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+          });
+        }
+          break;
+        default:
+          // NSOrderedDescending
+          
+          //dont allow to replace the new date with an old date
+          break;
+      }
+    }
+  }else{
+    //check wether the current time reached the expire date
+    [self checkDateIsExpired];
   }
 }
 
 - (void)initAll{
-  self.timer = [NSTimer scheduledTimerWithTimeInterval:GSLIMITATION_INTERVAL target:self selector:@selector(checkInterval) userInfo:nil repeats:YES];
   
   //app went to background. dismiss it and let the timer relaunch it
   [[NSNotificationCenter defaultCenter] addObserver:self
@@ -113,6 +196,8 @@ static GSLimitationChecker *instance = nil;
                                            selector:@selector(appDidEnterForeground)
                                                name:UIApplicationWillEnterForegroundNotification
                                              object:nil];
+  //default is no: user can set it to true to check past date
+  _isCheckingPast = NO;
 }
 
 + (GSLimitationChecker*)sharedInstance{
@@ -127,12 +212,23 @@ static GSLimitationChecker *instance = nil;
 #pragma mark - Implementations
 
 - (void)expiredAt:(NSDate*)expireDate withTitle:(NSString*)title withMessage:(NSString*)message{
+  
+  if(!self.timer){
+    //check before the timer start
+    [self appDidEnterForeground];
+    self.timer = [NSTimer scheduledTimerWithTimeInterval:GSLIMITATION_INTERVAL target:self selector:@selector(checkInterval) userInfo:nil repeats:YES];
+  }
   self.expire = expireDate;
   _title = title;
   _msg = message;
 }
 
 - (void)expiredAt:(NSDate *)expireDate forTarget:(id<GSLimitationCheckerDelegate>)target andButtonLabel:(NSString*)label withTitle:(NSString *)title withMessage:(NSString *)message{
+  if(!self.timer){
+    //check before the timer start
+    [self appDidEnterForeground];
+    self.timer = [NSTimer scheduledTimerWithTimeInterval:GSLIMITATION_INTERVAL target:self selector:@selector(checkInterval) userInfo:nil repeats:YES];
+  }
   self.expire = expireDate;
   _title = title;
   _msg = message;
